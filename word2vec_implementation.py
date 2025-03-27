@@ -1,15 +1,9 @@
-
-
 """
 # **Implémentation from scratch de Word2Vec**
 
-Ce projet contient une implémentation complète des modèles Word2Vec (CBOW et Skip-gram)
-avec les optimisations avancées comme le negative sampling et le sous-échantillonnage
-des mots fréquents. Il inclut également des utilitaires pour évaluer et visualiser 
-les embeddings obtenus.
-
-Note: Cette implémentation est complexe et requiert une attention particulière 
-à la manipulation des gradients et au processus d'échantillonnage négatif.
+Implémentation des modèles Word2Vec (CBOW et Skip-gram) avec negative sampling
+et sous-échantillonnage des mots fréquents. Inclut des outils d'évaluation et
+de visualisation des embeddings.
 """
 
 import numpy as np
@@ -30,7 +24,7 @@ from sklearn.metrics import accuracy_score, classification_report
 import logging
 import pickle
 import random
-from tqdm import tqdm  # Utilisation de tqdm pour suivre la progression des opérations longues
+from tqdm import tqdm
 import multiprocessing
 from functools import partial
 import math
@@ -43,15 +37,14 @@ from nltk.stem import WordNetLemmatizer
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Téléchargement des ressources NLTK nécessaires
+# Téléchargement des ressources NLTK
 nltk.download('punkt')
 nltk.download('stopwords')
 nltk.download('wordnet')
 try:
     nltk.download('punkt_tab')
 except:
-    # Fallback pour la tokenisation si punkt_tab n'est pas disponible
-    # Cette ressource peut être problématique sur certains environnements
+    # Fallback si punkt_tab n'est pas disponible
     pass
 
 # ===================================
@@ -59,29 +52,23 @@ except:
 # ===================================
 
 """
-Word2Vec est une technique pour apprendre des représentations vectorielles des mots
-à partir de larges corpus de texte. Elle repose sur l'hypothèse distributionnelle:
-les mots qui apparaissent dans des contextes similaires ont tendance à avoir des 
-significations similaires.
+Word2Vec génère des représentations vectorielles de mots basées sur l'hypothèse
+distributionnelle que les mots apparaissant dans des contextes similaires ont
+des significations similaires.
 
-Deux architectures principales:
-1. CBOW (Continuous Bag of Words): prédit un mot à partir de son contexte
+Architectures:
+1. CBOW: prédit un mot à partir de son contexte
 2. Skip-gram: prédit le contexte à partir d'un mot
 
-Les avantages de Word2Vec:
+Avantages:
 - Capture la sémantique des mots
-- Permet des opérations arithmétiques sur les vecteurs (roi - homme + femme = reine)
-- Dimensionnalité réduite par rapport aux représentations one-hot
-- Généralisable à de nouveaux mots/contextes
+- Permet des opérations vectorielles (roi - homme + femme ≈ reine)
+- Plus compact que les représentations one-hot
+- Généralisation à de nouveaux contextes
 
-Principes mathématiques sous-jacents:
-- Fonction objective: maximiser la probabilité conditionnelle des mots cibles
-  dans leur contexte (ou vice versa pour Skip-gram)
-- Utilisation de la descente de gradient pour optimiser les poids
+Base mathématique:
+- Optimisation par descente de gradient
 - Techniques d'optimisation: negative sampling, subsampling
-
-Note: Skip-gram est généralement plus performant pour les mots rares, tandis que
-CBOW offre une meilleure efficacité computationnelle. Le choix dépend du cas d'usage.
 """
 
 # ===================================
@@ -89,7 +76,7 @@ CBOW offre une meilleure efficacité computationnelle. Le choix dépend du cas d
 # ===================================
 
 class TextPreprocessor:
-    """Classe pour le prétraitement des données textuelles."""
+    """Prétraitement des données textuelles."""
     
     def __init__(self, min_count=5, max_vocab_size=None, remove_stopwords=True, 
                  lemmatize=True, lowercase=True, window_size=5):
@@ -97,12 +84,12 @@ class TextPreprocessor:
         Initialise le préprocesseur de texte.
         
         Args:
-            min_count: Nombre minimal d'occurrences pour qu'un mot soit inclus dans le vocabulaire
-            max_vocab_size: Taille maximale du vocabulaire (les mots les plus fréquents sont conservés)
-            remove_stopwords: Si True, supprime les stopwords
-            lemmatize: Si True, applique la lemmatisation
-            lowercase: Si True, convertit le texte en minuscules
-            window_size: Taille de la fenêtre contextuelle pour générer les paires d'entraînement
+            min_count: Occurrences minimales pour inclusion dans le vocabulaire
+            max_vocab_size: Taille maximale du vocabulaire
+            remove_stopwords: Suppression des stopwords
+            lemmatize: Application de la lemmatisation
+            lowercase: Conversion en minuscules
+            window_size: Taille de la fenêtre contextuelle
         """
         self.min_count = min_count
         self.max_vocab_size = max_vocab_size
@@ -111,23 +98,23 @@ class TextPreprocessor:
         self.lowercase = lowercase
         self.window_size = window_size
         
-        self.word2idx = {}  # Mapping mot -> indice
-        self.idx2word = {}  # Mapping indice -> mot
-        self.word_counts = Counter()  # Comptage des occurrences des mots
-        self.vocab_size = 0  # Taille du vocabulaire
+        self.word2idx = {}
+        self.idx2word = {}
+        self.word_counts = Counter()
+        self.vocab_size = 0
         
         # Outils pour le prétraitement
         self.stop_words = set(stopwords.words('english')) if remove_stopwords else set()
         self.lemmatizer = WordNetLemmatizer() if lemmatize else None
         
-        # Statistiques pour le sous-échantillonnage
-        self.word_frequencies = {}  # Fréquences relatives des mots
-        self.total_words = 0  # Nombre total de mots dans le corpus
-        self.subsampling_threshold = 1e-5  # Valeur par défaut recommandée dans la publication de référence
+        # Pour le sous-échantillonnage
+        self.word_frequencies = {}
+        self.total_words = 0
+        self.subsampling_threshold = 1e-5
         
     def normalize_text(self, text):
         """
-        Normalise un texte en appliquant diverses transformations.
+        Normalise un texte par tokenisation et nettoyage.
         
         Args:
             text: Texte à normaliser
@@ -135,29 +122,21 @@ class TextPreprocessor:
         Returns:
             Liste de tokens normalisés
         """
-        # Conversion en minuscules si demandée
         if self.lowercase:
             text = text.lower()
         
-        # Suppression des caractères spéciaux et des chiffres
-        # Approche simple mais efficace pour la normalisation du texte
+        # Nettoyage du texte
         text = re.sub(r'[^\w\s]', ' ', text)
-        text = re.sub(r'\d+', ' NUM ', text)  # substitution des séquences numériques par un token
+        text = re.sub(r'\d+', ' NUM ', text)
         
-        # Tokenisation simple au cas où nltk aurait des problèmes
         try:
-            # Essayer d'abord avec NLTK
             tokens = word_tokenize(text)
         except LookupError:
-            # Fallback sur une méthode de tokenisation simple si NLTK échoue
-            # Utile pour les environnements avec des restrictions réseau
             tokens = text.split()
         
-        # Suppression des stopwords si demandée
         if self.remove_stopwords:
             tokens = [t for t in tokens if t not in self.stop_words]
             
-        # Lemmatisation si demandée
         if self.lemmatize:
             tokens = [self.lemmatizer.lemmatize(t) for t in tokens]
             
@@ -165,37 +144,36 @@ class TextPreprocessor:
     
     def build_vocab(self, texts):
         """
-        Construit le vocabulaire à partir d'une liste de textes.
+        Construit le vocabulaire à partir des textes.
         
         Args:
-            texts: Liste de textes (ou générateur)
+            texts: Liste de textes
             
         Returns:
             self pour chaînage
         """
         logger.info("Construction du vocabulaire...")
         
-        # Compter les occurrences de chaque mot
         for text in tqdm(texts):
             tokens = self.normalize_text(text)
             self.word_counts.update(tokens)
             self.total_words += len(tokens)
         
-        # Filtrer les mots rares
+        # Filtrage par fréquence
         filtered_words = {word: count for word, count in self.word_counts.items() 
                          if count >= self.min_count}
         
-        # Limiter la taille du vocabulaire si demandé
+        # Limitation de taille
         if self.max_vocab_size and len(filtered_words) > self.max_vocab_size:
             filtered_words = dict(sorted(filtered_words.items(), 
                                          key=lambda x: x[1], reverse=True)[:self.max_vocab_size])
         
-        # Créer les mappings word2idx et idx2word
+        # Création des mappings
         self.word2idx = {word: idx for idx, word in enumerate(filtered_words.keys())}
         self.idx2word = {idx: word for word, idx in self.word2idx.items()}
         self.vocab_size = len(self.word2idx)
         
-        # Calculer les fréquences relatives pour le sous-échantillonnage
+        # Calcul des fréquences relatives
         self.word_frequencies = {word: count / self.total_words for word, count in filtered_words.items()}
         
         logger.info(f"Vocabulaire construit avec {self.vocab_size} mots uniques")
@@ -205,8 +183,6 @@ class TextPreprocessor:
         """
         Calcule la probabilité de conserver un mot selon sa fréquence.
         
-        Formule: P(w) = (√(t/f(w)) + 1) × (t/f(w))
-        
         Args:
             word: Mot à évaluer
             
@@ -214,74 +190,65 @@ class TextPreprocessor:
             Probabilité de conserver le mot (entre 0 et 1)
         """
         if word not in self.word_frequencies:
-            return 0  # Mot hors vocabulaire
+            return 0
         
         frequency = self.word_frequencies[word]
         if frequency == 0:
             return 0
         
-        # Formule de sous-échantillonnage
-        # Cette formule non-triviale est expliquée en détail dans la publication de référence
         t = self.subsampling_threshold
         ratio = t / frequency
         prob = (np.sqrt(ratio) + 1) * ratio
         
-        # Limiter la probabilité à 1
         return min(prob, 1.0)
     
     def generate_training_pairs(self, texts, model_type='cbow'):
         """
-        Génère des paires d'entraînement (contexte, cible) à partir des textes.
+        Génère des paires d'entraînement à partir des textes.
         
         Args:
             texts: Liste de textes
-            model_type: Type de modèle ('cbow' ou 'skipgram')
+            model_type: 'cbow' ou 'skipgram'
             
         Returns:
             Liste de paires (contexte, cible)
         """
-        logger.info(f"Génération des paires d'entraînement pour le modèle {model_type}...")
+        logger.info(f"Génération des paires d'entraînement pour {model_type}...")
         
         training_pairs = []
         
         for text in tqdm(texts):
             tokens = self.normalize_text(text)
             
-            # Filtrer les mots hors vocabulaire et appliquer le sous-échantillonnage
+            # Filtrage et sous-échantillonnage
             filtered_tokens = []
             for token in tokens:
-                if token in self.word2idx:  # Vérifier si le mot est dans le vocabulaire
-                    # Appliquer le sous-échantillonnage
+                if token in self.word2idx:
                     prob = self.subsample_prob(token)
                     if prob >= 1.0 or random.random() <= prob:
                         filtered_tokens.append(token)
             
-            # Générer les paires (contexte, cible)
+            # Génération des paires
             for i, target in enumerate(filtered_tokens):
-                # Déterminer la fenêtre contextuelle
                 window_start = max(0, i - self.window_size)
                 window_end = min(len(filtered_tokens), i + self.window_size + 1)
                 
-                # Collecter les mots du contexte
                 context_words = [filtered_tokens[j] for j in range(window_start, window_end) 
                                 if j != i and filtered_tokens[j] in self.word2idx]
                 
                 if not context_words:
-                    continue  # Ignorer si pas de mots contextuels
+                    continue
                 
-                # Convertir en indices
                 target_idx = self.word2idx[target]
                 context_indices = [self.word2idx[word] for word in context_words]
                 
                 if model_type == 'cbow':
-                    # CBOW: le contexte prédit le mot cible
                     training_pairs.append((context_indices, target_idx))
-                else:  # model_type == 'skipgram'
-                    # Skip-gram: le mot cible prédit chaque mot du contexte
+                else:  # skipgram
                     for context_idx in context_indices:
                         training_pairs.append((target_idx, context_idx))
                         
-        logger.info(f"Génération terminée avec {len(training_pairs)} paires d'entraînement")
+        logger.info(f"Génération terminée avec {len(training_pairs)} paires")
         return training_pairs
     
     def save(self, filepath):
@@ -300,10 +267,7 @@ class TextPreprocessor:
 # ===================================
 
 class CBOW:
-    """
-    Implémentation du modèle Continuous Bag of Words (CBOW).
-    Le modèle CBOW prédit un mot cible à partir de son contexte.
-    """
+    """Modèle Continuous Bag of Words prédisant un mot à partir de son contexte."""
     
     def __init__(self, vocab_size, embedding_dim=100, learning_rate=0.025, negative_samples=5):
         """
@@ -313,37 +277,27 @@ class CBOW:
             vocab_size: Taille du vocabulaire
             embedding_dim: Dimension des embeddings
             learning_rate: Taux d'apprentissage
-            negative_samples: Nombre d'échantillons négatifs par exemple positif
+            negative_samples: Nombre d'échantillons négatifs par exemple
         """
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
         self.learning_rate = learning_rate
         self.negative_samples = negative_samples
         
-        # Initialisation des matrices de poids
-        # W: matrice d'embeddings d'entrée (mots contextuels)
-        # W': matrice d'embeddings de sortie (mots cibles)
-        # Initialisation avec une distribution normale de faible variance
-        # La distribution normale semble donner de meilleurs résultats que la distribution uniforme
+        # Initialisation des matrices
         self.W = np.random.normal(0, 0.01, (vocab_size, embedding_dim))
         self.W_prime = np.random.normal(0, 0.01, (vocab_size, embedding_dim))
         
-        # Table de distribution pour le negative sampling
+        # Table pour le negative sampling
         self.prepare_negative_sampling_table()
         
     def prepare_negative_sampling_table(self, table_size=100000000):
         """
-        Prépare une table de distribution pour l'échantillonnage négatif.
-        
-        La probabilité de sélection d'un mot est proportionnelle à sa fréquence
-        élevée à la puissance 3/4 (empiriquement efficace).
+        Crée une table de distribution pour l'échantillonnage négatif.
         
         Args:
-            table_size: Taille de la table de distribution
+            table_size: Taille de la table
         """
-        # Pour l'instant, utilisation d'une distribution uniforme
-        # Dans une implémentation réelle, cela devrait être basé sur les fréquences des mots
-        # TODO: Implémenter la vraie distribution basée sur les fréquences
         self.negative_sampling_table = np.arange(self.vocab_size)
     
     def negative_sampling(self, positive_example, num_samples):
@@ -352,13 +306,11 @@ class CBOW:
         
         Args:
             positive_example: Indice du mot positif à éviter
-            num_samples: Nombre d'échantillons négatifs à générer
+            num_samples: Nombre d'échantillons à générer
             
         Returns:
             Liste d'indices de mots négatifs
         """
-        # Échantillonnage aléatoire simple pour cette implémentation
-        # Une implémentation plus sophistiquée utiliserait la table de distribution
         negative_samples = []
         while len(negative_samples) < num_samples:
             neg = np.random.randint(0, self.vocab_size)
@@ -368,62 +320,53 @@ class CBOW:
     
     def forward(self, context_indices):
         """
-        Passe avant: calcule la représentation vectorielle du contexte.
+        Calcule la représentation vectorielle du contexte.
         
         Args:
-            context_indices: Liste d'indices des mots du contexte
+            context_indices: Indices des mots du contexte
             
         Returns:
             Vecteur de contexte moyen
         """
-        # Récupérer les embeddings des mots contextuels
         context_vectors = np.array([self.W[idx] for idx in context_indices])
-        
-        # Calculer la moyenne des vecteurs contextuels
         context_vector = np.mean(context_vectors, axis=0)
         
         return context_vector
     
     def sigmoid(self, x):
-        """Fonction sigmoïde."""
-        # Implémentation optimisée pour éviter les problèmes d'overflow avec les grands nombres négatifs
+        """Fonction sigmoïde optimisée pour éviter les overflow."""
         return 1 / (1 + np.exp(-x))
     
     def compute_loss_and_gradients(self, context_vector, target_idx, negative_indices):
         """
-        Calcule la perte et les gradients pour un exemple d'entraînement.
+        Calcule la perte et les gradients pour un exemple.
         
         Args:
-            context_vector: Vecteur de contexte (moyenne des embeddings contextuels)
+            context_vector: Vecteur de contexte moyen
             target_idx: Indice du mot cible
-            negative_indices: Liste d'indices des mots négatifs
+            negative_indices: Indices des mots négatifs
             
         Returns:
             Tuple (perte, gradients)
         """
-        # Récupérer le vecteur du mot cible et des mots négatifs
+        # Vecteurs cible et négatifs
         target_vector = self.W_prime[target_idx]
         negative_vectors = self.W_prime[negative_indices]
         
-        # Calcul du score pour le mot cible (produit scalaire)
+        # Calcul des scores
         target_score = np.dot(context_vector, target_vector)
         target_prob = self.sigmoid(target_score)
         
-        # Calcul des scores pour les mots négatifs
         negative_scores = np.dot(negative_vectors, context_vector)
-        negative_probs = self.sigmoid(-negative_scores)  # On veut des probabilités proches de 1 (donc scores négatifs)
+        negative_probs = self.sigmoid(-negative_scores)
         
-        # Calcul de la perte (log-vraisemblance négative)
+        # Calcul de la perte
         loss = -np.log(target_prob) - np.sum(np.log(negative_probs))
         
         # Calcul des gradients
-        # Gradient pour le mot cible
-        target_gradient = context_vector * (target_prob - 1)  # dérivée de -log(sigmoid(x))
-        
-        # Gradients pour les mots négatifs
+        target_gradient = context_vector * (target_prob - 1)
         negative_gradients = np.outer(1 - negative_probs, context_vector)
         
-        # Gradient pour le vecteur de contexte
         context_gradient = (target_prob - 1) * target_vector
         for i, neg_idx in enumerate(negative_indices):
             context_gradient += (1 - negative_probs[i]) * negative_vectors[i]
@@ -436,21 +379,21 @@ class CBOW:
     
     def update_weights(self, gradients, context_indices):
         """
-        Met à jour les poids du modèle en fonction des gradients.
+        Met à jour les poids du modèle.
         
         Args:
             gradients: Dictionnaire des gradients
-            context_indices: Liste d'indices des mots du contexte
+            context_indices: Indices des mots du contexte
         """
-        # Mise à jour des poids pour le mot cible
+        # Mise à jour pour le mot cible
         target_idx, target_gradient = gradients['target']
         self.W_prime[target_idx] -= self.learning_rate * target_gradient
         
-        # Mise à jour des poids pour les mots négatifs
+        # Mise à jour pour les mots négatifs
         for neg_idx, neg_gradient in gradients['negatives']:
             self.W_prime[neg_idx] -= self.learning_rate * neg_gradient
         
-        # Mise à jour des poids pour les mots contextuels
+        # Mise à jour pour les mots contextuels
         context_gradient = gradients['context']
         for idx in context_indices:
             self.W[idx] -= self.learning_rate * context_gradient
@@ -460,35 +403,28 @@ class CBOW:
         Entraîne le modèle sur une paire (contexte, cible).
         
         Args:
-            context_indices: Liste d'indices des mots du contexte
+            context_indices: Indices des mots du contexte
             target_idx: Indice du mot cible
             
         Returns:
             Perte pour cette paire
         """
-        # Passe avant
         context_vector = self.forward(context_indices)
-        
-        # Échantillonnage négatif
         negative_indices = self.negative_sampling(target_idx, self.negative_samples)
-        
-        # Calcul de la perte et des gradients
         loss, gradients = self.compute_loss_and_gradients(context_vector, target_idx, negative_indices)
-        
-        # Mise à jour des poids
         self.update_weights(gradients, context_indices)
         
         return loss
     
     def train(self, training_pairs, epochs=5, batch_size=256, verbose=True):
         """
-        Entraîne le modèle sur un ensemble de paires d'entraînement.
+        Entraîne le modèle sur un ensemble de paires.
         
         Args:
             training_pairs: Liste de paires (contexte, cible)
-            epochs: Nombre d'époques d'entraînement
-            batch_size: Taille des lots pour l'entraînement
-            verbose: Si True, affiche la progression
+            epochs: Nombre d'époques
+            batch_size: Taille des lots
+            verbose: Affichage de la progression
             
         Returns:
             Historique des pertes
@@ -500,10 +436,8 @@ class CBOW:
             epoch_loss = 0
             start_time = time.time()
             
-            # Mélanger les données
             random.shuffle(training_pairs)
             
-            # Traitement par lots
             for batch_idx in tqdm(range(0, len(training_pairs), batch_size), 
                                    desc=f"Époque {epoch+1}/{epochs}",
                                    disable=not verbose):
@@ -516,7 +450,6 @@ class CBOW:
                 
                 epoch_loss += batch_loss / len(batch_pairs)
             
-            # Perte moyenne pour l'époque
             epoch_loss /= total_batches
             losses.append(epoch_loss)
             
@@ -527,24 +460,11 @@ class CBOW:
         return losses
     
     def get_word_embedding(self, word_idx):
-        """
-        Récupère l'embedding d'un mot.
-        
-        Args:
-            word_idx: Indice du mot
-            
-        Returns:
-            Vecteur d'embedding
-        """
+        """Récupère l'embedding d'un mot."""
         return self.W[word_idx]
     
     def get_embeddings(self):
-        """
-        Récupère tous les embeddings.
-        
-        Returns:
-            Matrice des embeddings
-        """
+        """Récupère tous les embeddings."""
         return self.W
     
     def save(self, filepath):
@@ -563,10 +483,7 @@ class CBOW:
 # ===================================
 
 class SkipGram:
-    """
-    Implémentation du modèle Skip-gram.
-    Le modèle Skip-gram prédit les mots du contexte à partir d'un mot cible.
-    """
+    """Modèle Skip-gram prédisant le contexte à partir d'un mot cible."""
     
     def __init__(self, vocab_size, embedding_dim=100, learning_rate=0.025, negative_samples=5):
         """
@@ -576,33 +493,25 @@ class SkipGram:
             vocab_size: Taille du vocabulaire
             embedding_dim: Dimension des embeddings
             learning_rate: Taux d'apprentissage
-            negative_samples: Nombre d'échantillons négatifs par exemple positif
+            negative_samples: Nombre d'échantillons négatifs par exemple
         """
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
         self.learning_rate = learning_rate
         self.negative_samples = negative_samples
         
-        # Initialisation des matrices de poids
-        # W: matrice d'embeddings d'entrée (mots cibles)
-        # W': matrice d'embeddings de sortie (mots contextuels)
         self.W = np.random.normal(0, 0.01, (vocab_size, embedding_dim))
         self.W_prime = np.random.normal(0, 0.01, (vocab_size, embedding_dim))
         
-        # Table de distribution pour le negative sampling
         self.prepare_negative_sampling_table()
         
     def prepare_negative_sampling_table(self, table_size=100000000):
         """
-        Prépare une table de distribution pour l'échantillonnage négatif.
-        
-        La probabilité de sélection d'un mot est proportionnelle à sa fréquence
-        élevée à la puissance 3/4 (empiriquement efficace).
+        Prépare une table pour l'échantillonnage négatif.
         
         Args:
-            table_size: Taille de la table de distribution
+            table_size: Taille de la table
         """
-        # Pour l'instant, utilisation d'une distribution uniforme
         self.negative_sampling_table = np.arange(self.vocab_size)
     
     def negative_sampling(self, positive_example, num_samples):
@@ -610,13 +519,12 @@ class SkipGram:
         Sélectionne des exemples négatifs pour l'entraînement.
         
         Args:
-            positive_example: Indice du mot positif à éviter
-            num_samples: Nombre d'échantillons négatifs à générer
+            positive_example: Indice du mot positif
+            num_samples: Nombre d'échantillons
             
         Returns:
-            Liste d'indices de mots négatifs
+            Liste d'indices négatifs
         """
-        # Échantillonnage aléatoire simple pour cette implémentation
         negative_samples = []
         while len(negative_samples) < num_samples:
             neg = np.random.randint(0, self.vocab_size)
@@ -639,64 +547,51 @@ class SkipGram:
         Returns:
             Perte pour cette paire
         """
-        # Récupérer l'embedding du mot cible
         target_vector = self.W[target_idx]
-        
-        # Récupérer l'embedding du mot contextuel
         context_vector = self.W_prime[context_idx]
         
-        # Échantillonnage négatif
         negative_indices = self.negative_sampling(context_idx, self.negative_samples)
         negative_vectors = self.W_prime[negative_indices]
         
-        # Calcul du score pour le mot contextuel (produit scalaire)
         context_score = np.dot(target_vector, context_vector)
         context_prob = self.sigmoid(context_score)
         
-        # Calcul des scores pour les mots négatifs
         negative_scores = np.dot(target_vector, negative_vectors.T)
-        negative_probs = self.sigmoid(-negative_scores)  # On veut des probabilités proches de 1
+        negative_probs = self.sigmoid(-negative_scores)
         
-        # Calcul de la perte (log-vraisemblance négative)
         loss = -np.log(context_prob) - np.sum(np.log(negative_probs))
         
-        # Calcul des gradients
-        # Gradient pour le mot contextuel
+        # Gradients
         context_gradient = target_vector * (context_prob - 1)
         
-        # Gradients pour les mots négatifs
         negative_gradients = []
         for i, neg_idx in enumerate(negative_indices):
             neg_gradient = target_vector * (1 - negative_probs[i])
             negative_gradients.append((neg_idx, neg_gradient))
         
-        # Gradient pour le vecteur cible
         target_gradient = (context_prob - 1) * context_vector
         for i, neg_idx in enumerate(negative_indices):
             target_gradient += (1 - negative_probs[i]) * negative_vectors[i]
         
-        # Mise à jour des poids
-        # Mise à jour pour le mot contextuel
+        # Mise à jour
         self.W_prime[context_idx] -= self.learning_rate * context_gradient
         
-        # Mise à jour pour les mots négatifs
         for neg_idx, neg_gradient in negative_gradients:
             self.W_prime[neg_idx] -= self.learning_rate * neg_gradient
         
-        # Mise à jour pour le mot cible
         self.W[target_idx] -= self.learning_rate * target_gradient
         
         return loss
     
     def train(self, training_pairs, epochs=5, batch_size=256, verbose=True):
         """
-        Entraîne le modèle sur un ensemble de paires d'entraînement.
+        Entraîne le modèle sur un ensemble de paires.
         
         Args:
             training_pairs: Liste de paires (cible, contexte)
-            epochs: Nombre d'époques d'entraînement
-            batch_size: Taille des lots pour l'entraînement
-            verbose: Si True, affiche la progression
+            epochs: Nombre d'époques
+            batch_size: Taille des lots
+            verbose: Affichage de la progression
             
         Returns:
             Historique des pertes
@@ -708,10 +603,8 @@ class SkipGram:
             epoch_loss = 0
             start_time = time.time()
             
-            # Mélanger les données
             random.shuffle(training_pairs)
             
-            # Traitement par lots
             for batch_idx in tqdm(range(0, len(training_pairs), batch_size), 
                                    desc=f"Époque {epoch+1}/{epochs}",
                                    disable=not verbose):
@@ -724,7 +617,6 @@ class SkipGram:
                 
                 epoch_loss += batch_loss / len(batch_pairs)
             
-            # Perte moyenne pour l'époque
             epoch_loss /= total_batches
             losses.append(epoch_loss)
             
@@ -735,24 +627,11 @@ class SkipGram:
         return losses
     
     def get_word_embedding(self, word_idx):
-        """
-        Récupère l'embedding d'un mot.
-        
-        Args:
-            word_idx: Indice du mot
-            
-        Returns:
-            Vecteur d'embedding
-        """
+        """Récupère l'embedding d'un mot."""
         return self.W[word_idx]
     
     def get_embeddings(self):
-        """
-        Récupère tous les embeddings.
-        
-        Returns:
-            Matrice des embeddings
-        """
+        """Récupère tous les embeddings."""
         return self.W
     
     def save(self, filepath):
@@ -771,18 +650,15 @@ class SkipGram:
 # ===================================
 
 class NegativeSamplingTable:
-    """
-    Implémentation avancée de la table d'échantillonnage négatif.
-    Utilise l'échantillonnage pondéré par la fréquence à la puissance 3/4.
-    """
+    """Table d'échantillonnage négatif basée sur les fréquences des mots."""
     
     def __init__(self, word_frequencies, table_size=100000000):
         """
-        Initialise la table d'échantillonnage négatif.
+        Initialise la table d'échantillonnage.
         
         Args:
             word_frequencies: Dictionnaire {mot: fréquence}
-            table_size: Taille de la table de distribution
+            table_size: Taille de la table
         """
         self.table_size = table_size
         self.table = self._create_table(word_frequencies)
@@ -790,32 +666,27 @@ class NegativeSamplingTable:
         
     def _create_table(self, word_frequencies):
         """
-        Crée la table de distribution pour l'échantillonnage négatif.
+        Crée la table de distribution pour l'échantillonnage.
         
         Args:
             word_frequencies: Dictionnaire {mot: fréquence}
             
         Returns:
-            Tableau numpy pour l'échantillonnage
+            Table d'échantillonnage
         """
         logger.info("Création de la table d'échantillonnage négatif...")
         
-        # Liste des mots et des fréquences
         words = list(word_frequencies.keys())
         frequencies = np.array(list(word_frequencies.values()))
         
-        # Élever les fréquences à la puissance 3/4
-        # Cette valeur (3/4) vient du papier original, c'est magique mais ça marche bien
+        # Fréquences à la puissance 3/4
         pow_frequencies = np.power(frequencies, 0.75)
         
-        # Normaliser pour obtenir une distribution de probabilité
         pow_sum = np.sum(pow_frequencies)
         probs = pow_frequencies / pow_sum if pow_sum > 0 else pow_frequencies
         
-        # Calculer les tailles cumulatives des segments
         table = np.zeros(self.table_size, dtype=np.int32)
         
-        # Remplir la table
         p = 0
         i = 0
         for word_idx, word in enumerate(words):
@@ -825,12 +696,11 @@ class NegativeSamplingTable:
                     table[i] = word_idx
                     i += 1
         
-        # Remplir le reste de la table si nécessaire
         while i < self.table_size:
             table[i] = random.randint(0, len(words) - 1)
             i += 1
             
-        logger.info(f"Table d'échantillonnage négatif créée avec {self.table_size} entrées")
+        logger.info(f"Table d'échantillonnage créée avec {self.table_size} entrées")
         return table
     
     def sample(self, positive_examples=None, n_samples=5):
@@ -838,8 +708,8 @@ class NegativeSamplingTable:
         Échantillonne des exemples négatifs.
         
         Args:
-            positive_examples: Liste d'exemples positifs à éviter
-            n_samples: Nombre d'échantillons à générer
+            positive_examples: Exemples positifs à éviter
+            n_samples: Nombre d'échantillons
             
         Returns:
             Liste d'indices de mots négatifs
@@ -863,14 +733,14 @@ class NegativeSamplingTable:
 # ===================================
 
 class Word2VecEvaluator:
-    """Classe pour l'évaluation et la visualisation des embeddings Word2Vec."""
+    """Évaluation et visualisation des embeddings Word2Vec."""
     
     def __init__(self, model, preprocessor):
         """
         Initialise l'évaluateur.
         
         Args:
-            model: Modèle Word2Vec (CBOW ou Skip-gram)
+            model: Modèle Word2Vec
             preprocessor: Préprocesseur de texte
         """
         self.model = model
@@ -886,7 +756,7 @@ class Word2VecEvaluator:
             word2: Deuxième mot
             
         Returns:
-            Similarité cosinus entre les deux mots
+            Similarité cosinus
         """
         if word1 not in self.preprocessor.word2idx or word2 not in self.preprocessor.word2idx:
             return None
@@ -905,7 +775,7 @@ class Word2VecEvaluator:
         
         Args:
             word: Mot de référence
-            n: Nombre de mots similaires à retourner
+            n: Nombre de mots à retourner
             
         Returns:
             Liste de tuples (mot, similarité)
@@ -916,13 +786,11 @@ class Word2VecEvaluator:
         word_idx = self.preprocessor.word2idx[word]
         word_vec = self.embeddings[word_idx].reshape(1, -1)
         
-        # Calculer les similarités avec tous les mots
         similarities = cosine_similarity(word_vec, self.embeddings)[0]
         
-        # Trier les mots par similarité décroissante
         most_similar = []
         for idx in similarities.argsort()[::-1]:
-            if idx != word_idx:  # Exclure le mot lui-même
+            if idx != word_idx:
                 similar_word = self.preprocessor.idx2word[idx]
                 similarity = similarities[idx]
                 most_similar.append((similar_word, similarity))
@@ -944,7 +812,6 @@ class Word2VecEvaluator:
         correct = 0
         
         for a, b, c, d in analogies:
-            # Vérifier que tous les mots sont dans le vocabulaire
             if (a not in self.preprocessor.word2idx or 
                 b not in self.preprocessor.word2idx or 
                 c not in self.preprocessor.word2idx or 
@@ -955,18 +822,15 @@ class Word2VecEvaluator:
             b_idx = self.preprocessor.word2idx[b]
             c_idx = self.preprocessor.word2idx[c]
             
-            # Calculer le vecteur attendu: d ≈ c + (b - a)
+            # d ≈ c + (b - a)
             target_vec = self.embeddings[c_idx] + (self.embeddings[b_idx] - self.embeddings[a_idx])
             
-            # Trouver le mot le plus similaire au vecteur cible
             similarities = cosine_similarity(target_vec.reshape(1, -1), self.embeddings)[0]
             
-            # Exclure a, b et c des candidats
             similarities[a_idx] = -np.inf
             similarities[b_idx] = -np.inf
             similarities[c_idx] = -np.inf
             
-            # Récupérer le mot le plus similaire
             predicted_idx = np.argmax(similarities)
             predicted_word = self.preprocessor.idx2word[predicted_idx]
             
@@ -980,18 +844,16 @@ class Word2VecEvaluator:
     
     def visualize_embeddings(self, words=None, n=100, method='tsne', n_components=2, random_state=42):
         """
-        Visualise les embeddings dans un espace à 2 ou 3 dimensions.
+        Visualise les embeddings dans un espace réduit.
         
         Args:
-            words: Liste de mots à visualiser (si None, utilise les n mots les plus fréquents)
-            n: Nombre de mots à visualiser (si words est None)
-            method: Méthode de réduction de dimension ('tsne' ou 'pca')
+            words: Liste de mots à visualiser
+            n: Nombre de mots à visualiser
+            method: Méthode de réduction ('tsne' ou 'pca')
             n_components: Nombre de composantes (2 ou 3)
-            random_state: Graine aléatoire pour la reproductibilité
+            random_state: Graine aléatoire
         """
-        # Sélectionner les mots à visualiser
         if words is None:
-            # Utiliser les n mots les plus fréquents
             words = []
             word_counts = sorted(self.preprocessor.word_counts.items(), key=lambda x: x[1], reverse=True)
             for word, _ in word_counts:
@@ -1000,29 +862,22 @@ class Word2VecEvaluator:
                     if len(words) >= n:
                         break
         else:
-            # Filtrer les mots qui ne sont pas dans le vocabulaire
             words = [word for word in words if word in self.preprocessor.word2idx]
             
         if not words:
             logger.warning("Aucun mot à visualiser.")
             return
             
-        # Récupérer les embeddings des mots sélectionnés
         word_indices = [self.preprocessor.word2idx[word] for word in words]
         word_vectors = self.embeddings[word_indices]
         
-        # Réduction de dimension
         if method == 'tsne':
-            # t-SNE est lent mais donne souvent de meilleurs résultats
-            # pour visualiser les similarités locales
             reducer = TSNE(n_components=n_components, random_state=random_state)
         else:  # method == 'pca'
-            # PCA est plus rapide mais capture moins bien les similarités locales
             reducer = PCA(n_components=n_components, random_state=random_state)
             
         reduced_vectors = reducer.fit_transform(word_vectors)
         
-        # Visualisation
         plt.figure(figsize=(12, 10))
         
         if n_components == 2:
@@ -1042,7 +897,7 @@ class Word2VecEvaluator:
         
     def document_to_vector(self, document):
         """
-        Convertit un document en vecteur en moyennant les embeddings des mots.
+        Convertit un document en vecteur par moyenne des embeddings.
         
         Args:
             document: Texte du document
@@ -1051,42 +906,30 @@ class Word2VecEvaluator:
             Vecteur du document
         """
         tokens = self.preprocessor.normalize_text(document)
-        
-        # Filtrer les mots hors vocabulaire
         tokens = [token for token in tokens if token in self.preprocessor.word2idx]
         
         if not tokens:
             return np.zeros(self.model.embedding_dim)
             
-        # Récupérer les embeddings des mots
         word_indices = [self.preprocessor.word2idx[token] for token in tokens]
         word_vectors = self.embeddings[word_indices]
         
-        # Calculer la moyenne
-        document_vector = np.mean(word_vectors, axis=0)
-        
-        return document_vector
+        return np.mean(word_vectors, axis=0)
         
     def save_embeddings_to_file(self, filepath):
         """
         Sauvegarde les embeddings dans un fichier texte.
         
         Args:
-            filepath: Chemin du fichier de sortie
+            filepath: Chemin du fichier
         """
         with open(filepath, 'w', encoding='utf-8') as f:
-            # Écrire la taille du vocabulaire et la dimension des embeddings
             f.write(f"{self.preprocessor.vocab_size} {self.model.embedding_dim}\n")
             
-            # Écrire les embeddings de chaque mot
             for idx in range(self.preprocessor.vocab_size):
                 word = self.preprocessor.idx2word[idx]
                 embedding = self.embeddings[idx]
-                
-                # Convertir le vecteur en chaîne de caractères
                 vector_str = ' '.join(str(x) for x in embedding)
-                
-                # Écrire la ligne
                 f.write(f"{word} {vector_str}\n")
                 
         logger.info(f"Embeddings sauvegardés dans {filepath}")
@@ -1096,21 +939,19 @@ class Word2VecEvaluator:
 # ===================================
 
 class TextClassifier:
-    """Classe pour la classification de texte utilisant des embeddings Word2Vec."""
+    """Classification de texte utilisant des embeddings Word2Vec."""
     
     def __init__(self, evaluator, classifier=None):
         """
-        Initialise le classificateur de texte.
+        Initialise le classificateur.
         
         Args:
             evaluator: Évaluateur Word2Vec
-            classifier: Classificateur sklearn (si None, utilise MLPClassifier)
+            classifier: Classificateur (défaut: MLPClassifier)
         """
         self.evaluator = evaluator
         
         if classifier is None:
-            # MLP = Perceptron multi-couches, marche généralement bien pour ce genre de tâches
-            # Une couche cachée de 100 neurones, c'est un bon compromis
             self.classifier = MLPClassifier(
                 hidden_layer_sizes=(100,),
                 activation='relu',
@@ -1132,9 +973,8 @@ class TextClassifier:
             labels: Liste d'étiquettes
             
         Returns:
-            Tuple (X, y) de features et étiquettes
+            Tuple (X, y)
         """
-        # Convertir les textes en vecteurs
         X = np.array([self.evaluator.document_to_vector(text) for text in texts])
         y = np.array(labels)
         
@@ -1151,10 +991,7 @@ class TextClassifier:
         Returns:
             self pour chaînage
         """
-        # Préparer les données
         X_train, y_train = self.prepare_data(train_texts, train_labels)
-        
-        # Entraîner le classificateur
         self.classifier.fit(X_train, y_train)
         
         return self
@@ -1170,13 +1007,9 @@ class TextClassifier:
         Returns:
             Rapport de classification
         """
-        # Préparer les données
         X_test, y_test = self.prepare_data(test_texts, test_labels)
-        
-        # Faire des prédictions
         y_pred = self.classifier.predict(X_test)
         
-        # Calculer le score
         accuracy = accuracy_score(y_test, y_pred)
         report = classification_report(y_test, y_pred)
         
@@ -1187,7 +1020,7 @@ class TextClassifier:
     
     def predict(self, texts):
         """
-        Fait des prédictions sur des textes.
+        Prédit les étiquettes pour des textes.
         
         Args:
             texts: Liste de textes
@@ -1195,10 +1028,7 @@ class TextClassifier:
         Returns:
             Prédictions
         """
-        # Préparer les données
         X = np.array([self.evaluator.document_to_vector(text) for text in texts])
-        
-        # Faire des prédictions
         return self.classifier.predict(X)
     
     def save(self, filepath):
@@ -1225,14 +1055,12 @@ def load_20newsgroups():
     """
     from sklearn.datasets import fetch_20newsgroups
     
-    # Charger les données d'entraînement
     train_data = fetch_20newsgroups(
         subset='train',
-        remove=('headers', 'footers', 'quotes'),  # retirer les parties non pertinentes
+        remove=('headers', 'footers', 'quotes'),
         random_state=42
     )
     
-    # Charger les données de test
     test_data = fetch_20newsgroups(
         subset='test',
         remove=('headers', 'footers', 'quotes'),
@@ -1248,21 +1076,15 @@ def load_imdb():
     Returns:
         Tuple (train_texts, train_labels, test_texts, test_labels)
     """
-    # Cette fonction suppose que le dataset IMDb est disponible localement
-    # Il peut être téléchargé depuis https://www.kaggle.com/datasets/lakshmi25npathi/imdb-dataset-of-50k-movie-reviews
-    
-    # Charger les données
     try:
         df = pd.read_csv('imdb_dataset.csv')
     except FileNotFoundError:
-        logger.error("Dataset IMDb non trouvé. Veuillez le télécharger depuis https://www.kaggle.com/datasets/lakshmi25npathi/imdb-dataset-of-50k-movie-reviews")
+        logger.error("Dataset IMDb non trouvé. Téléchargez-le depuis https://www.kaggle.com/datasets/lakshmi25npathi/imdb-dataset-of-50k-movie-reviews")
         return None, None, None, None
     
-    # Convertir les sentiments en étiquettes numériques
     label_map = {'positive': 1, 'negative': 0}
     df['label'] = df['sentiment'].map(label_map)
     
-    # Diviser en ensembles d'entraînement et de test
     train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
     
     return (train_df['review'].tolist(), train_df['label'].tolist(),
@@ -1279,13 +1101,13 @@ def main_pipeline(dataset='20newsgroups', model_type='cbow', embedding_dim=100,
         model_type: Type de modèle ('cbow' ou 'skipgram')
         embedding_dim: Dimension des embeddings
         window_size: Taille de la fenêtre contextuelle
-        min_count: Nombre minimal d'occurrences pour qu'un mot soit inclus dans le vocabulaire
-        negative_samples: Nombre d'échantillons négatifs par exemple positif
-        epochs: Nombre d'époques d'entraînement
-        subsampling: Si True, applique le sous-échantillonnage des mots fréquents
+        min_count: Seuil minimal d'occurrences pour un mot
+        negative_samples: Nombre d'échantillons négatifs
+        epochs: Nombre d'époques
+        subsampling: Application du sous-échantillonnage
         subsampling_threshold: Seuil pour le sous-échantillonnage
     """
-    # 1. Charger les données
+    # 1. Chargement des données
     logger.info(f"Chargement du dataset {dataset}...")
     if dataset == '20newsgroups':
         train_texts, train_labels, test_texts, test_labels = load_20newsgroups()
@@ -1295,7 +1117,7 @@ def main_pipeline(dataset='20newsgroups', model_type='cbow', embedding_dim=100,
     if train_texts is None:
         return
     
-    # 2. Prétraiter les données
+    # 2. Prétraitement
     logger.info("Prétraitement des données...")
     preprocessor = TextPreprocessor(
         min_count=min_count,
@@ -1304,21 +1126,16 @@ def main_pipeline(dataset='20newsgroups', model_type='cbow', embedding_dim=100,
         lemmatize=True
     )
     
-    # Sous-échantillonnage
     if subsampling:
         preprocessor.subsampling_threshold = subsampling_threshold
     else:
-        # Désactiver le sous-échantillonnage en utilisant un seuil très bas
         preprocessor.subsampling_threshold = 1e-10
     
-    # Construire le vocabulaire
     preprocessor.build_vocab(train_texts)
-    
-    # Générer les paires d'entraînement
     training_pairs = preprocessor.generate_training_pairs(train_texts, model_type=model_type)
     
-    # 3. Créer et entraîner le modèle
-    logger.info(f"Création et entraînement du modèle {model_type}...")
+    # 3. Création et entraînement du modèle
+    logger.info(f"Entraînement du modèle {model_type}...")
     if model_type == 'cbow':
         model = CBOW(
             vocab_size=preprocessor.vocab_size,
@@ -1332,14 +1149,12 @@ def main_pipeline(dataset='20newsgroups', model_type='cbow', embedding_dim=100,
             negative_samples=negative_samples
         )
     
-    # Entraîner le modèle
     losses = model.train(training_pairs, epochs=epochs)
     
-    # 4. Évaluer le modèle
+    # 4. Évaluation
     logger.info("Évaluation du modèle...")
     evaluator = Word2VecEvaluator(model, preprocessor)
     
-    # Afficher quelques exemples de similarité
     for word in ['computer', 'science', 'technology', 'movie', 'good', 'bad']:
         if word in preprocessor.word2idx:
             logger.info(f"Mots similaires à '{word}':")
@@ -1352,41 +1167,30 @@ def main_pipeline(dataset='20newsgroups', model_type='cbow', embedding_dim=100,
     classifier = TextClassifier(evaluator)
     classifier.train(train_texts, train_labels)
     
-    # Évaluer le classificateur
     logger.info("Évaluation du classificateur...")
     accuracy, report = classifier.evaluate(test_texts, test_labels)
     
     # 6. Visualisation
     logger.info("Visualisation des embeddings...")
-    # Sélectionner quelques mots pour la visualisation
     common_words = []
     word_counts = sorted(preprocessor.word_counts.items(), key=lambda x: x[1], reverse=True)
     for word, _ in word_counts:
-        if word in preprocessor.word2idx and len(word) > 2:  # Éviter les mots trop courts
+        if word in preprocessor.word2idx and len(word) > 2:
             common_words.append(word)
             if len(common_words) >= 100:
                 break
                 
-    # Visualiser les embeddings
     evaluator.visualize_embeddings(words=common_words, method='tsne')
     
-    # 7. Sauvegarder les résultats
+    # 7. Sauvegarde
     logger.info("Sauvegarde des résultats...")
     os.makedirs('results', exist_ok=True)
     
-    # Sauvegarder le modèle
     model.save(f'results/{model_type}_model.pkl')
-    
-    # Sauvegarder le préprocesseur
     preprocessor.save(f'results/{model_type}_preprocessor.pkl')
-    
-    # Sauvegarder les embeddings dans un format lisible
     evaluator.save_embeddings_to_file(f'results/{model_type}_embeddings.txt')
-    
-    # Sauvegarder le classificateur
     classifier.save(f'results/{model_type}_classifier.pkl')
     
-    # Tracer la courbe de perte
     plt.figure(figsize=(10, 6))
     plt.plot(losses)
     plt.title(f"Évolution de la perte pendant l'entraînement ({model_type})")
@@ -1402,20 +1206,18 @@ def main_pipeline(dataset='20newsgroups', model_type='cbow', embedding_dim=100,
 # ===================================
 
 if __name__ == "__main__":
-    # Vous pouvez modifier ces paramètres selon vos besoins
     main_pipeline(
         dataset='20newsgroups',
         model_type='cbow',
         embedding_dim=100,
         window_size=5,
         min_count=5,
-        negative_samples=10,  # 10 semble donner de meilleurs résultats que 5
+        negative_samples=10,
         epochs=5,
         subsampling=True,
         subsampling_threshold=1e-5
     )
     
-    # Vous pouvez également exécuter le pipeline pour Skip-gram
     main_pipeline(
         dataset='20newsgroups',
         model_type='skipgram',

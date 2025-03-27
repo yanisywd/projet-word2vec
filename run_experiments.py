@@ -1,11 +1,11 @@
 """
-# **Script d'exécution et visualisation des résultats pour Word2Vec**
+# **Script d'exploration et visualisation pour Word2Vec**
 
-Ce script permet d'explorer et de visualiser les modèles Word2Vec
-préalablement entraînés avec word2vec_implementation.py.
+Outil d'exploration et visualisation des modèles Word2Vec
+entraînés avec word2vec_implementation.py.
 
-Note préalable: Ce script nécessite que les modèles aient été générés
-au préalable via l'exécution de word2vec_implementation.py.
+Prérequis: Exécution préalable de word2vec_implementation.py pour
+générer les modèles.
 """
 
 import os
@@ -13,7 +13,7 @@ import sys
 import argparse
 import pickle
 import matplotlib.pyplot as plt
-import seaborn as sns  # Module de visualisation statistique basé sur matplotlib
+import seaborn as sns
 import pandas as pd
 import numpy as np
 import logging
@@ -24,30 +24,30 @@ from sklearn.decomposition import PCA
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# S'assurer que le répertoire actuel est dans sys.path
+# Ajout du répertoire courant au path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.append(script_dir)
 
-# Importation des modules depuis word2vec_implementation
+# Import des modules
 try:
     from word2vec_implementation import (
         TextPreprocessor, CBOW, SkipGram, Word2VecEvaluator, TextClassifier
     )
 except ImportError as e:
     logger.error(f"Erreur d'importation: {e}")
-    logger.error("Assurez-vous que word2vec_implementation.py est dans le même répertoire ou dans PYTHONPATH")
+    logger.error("Vérifiez que word2vec_implementation.py est accessible")
     sys.exit(1)
 
 def load_model(model_path):
     """
-    Charge un modèle Word2Vec à partir d'un fichier pickle.
+    Charge un modèle Word2Vec depuis un fichier.
     
     Args:
-        model_path: Chemin vers le fichier du modèle
+        model_path: Chemin du fichier modèle
         
     Returns:
-        Modèle Word2Vec (CBOW ou SkipGram)
+        Modèle Word2Vec
     """
     logger.info(f"Chargement du modèle depuis {model_path}...")
     try:
@@ -60,10 +60,10 @@ def load_model(model_path):
 
 def load_preprocessor(preprocessor_path):
     """
-    Charge un préprocesseur à partir d'un fichier pickle.
+    Charge un préprocesseur depuis un fichier.
     
     Args:
-        preprocessor_path: Chemin vers le fichier du préprocesseur
+        preprocessor_path: Chemin du fichier préprocesseur
         
     Returns:
         Préprocesseur TextPreprocessor
@@ -80,13 +80,13 @@ def load_preprocessor(preprocessor_path):
 def explore_analogies(evaluator):
     """Test de quelques analogies classiques."""
     analogies = [
-        ('man', 'woman', 'king', 'queen'),  # Analogie canonique dans les modèles Word2Vec
+        ('man', 'woman', 'king', 'queen'),
         ('france', 'paris', 'italy', 'rome'),
         ('man', 'woman', 'uncle', 'aunt'),
         ('good', 'better', 'bad', 'worse')
     ]
     
-    # Filtrer les analogies valides
+    # Filtrage des analogies valides
     valid_analogies = []
     for a, b, c, d in analogies:
         if (a in evaluator.preprocessor.word2idx and
@@ -102,17 +102,15 @@ def explore_analogies(evaluator):
     logger.info(f"Test de {len(valid_analogies)} analogies...")
     
     for a, b, c, d in valid_analogies:
-        # Calculer le vecteur attendu: d ≈ c + (b - a)
+        # Calcul de l'analogie: d ≈ c + (b - a)
         a_idx = evaluator.preprocessor.word2idx[a]
         b_idx = evaluator.preprocessor.word2idx[b]
         c_idx = evaluator.preprocessor.word2idx[c]
         
-        # Vecteurs
         a_vec = evaluator.embeddings[a_idx]
         b_vec = evaluator.embeddings[b_idx]
         c_vec = evaluator.embeddings[c_idx]
         
-        # Calcul de l'analogie
         target_vec = c_vec + (b_vec - a_vec)
         
         # Calcul des similarités
@@ -120,12 +118,12 @@ def explore_analogies(evaluator):
             np.linalg.norm(evaluator.embeddings, axis=1) * np.linalg.norm(target_vec)
         )
         
-        # Exclure a, b et c des candidats
+        # Exclusion des mots de l'analogie
         similarities[a_idx] = -np.inf
         similarities[b_idx] = -np.inf
         similarities[c_idx] = -np.inf
         
-        # Récupérer les 5 mots les plus similaires
+        # Top 5 résultats
         top_indices = similarities.argsort()[-5:][::-1]
         
         logger.info(f"Analogie: {a}:{b}::{c}:{d}")
@@ -197,7 +195,7 @@ def interactive_exploration(evaluator):
                 print(f"Le mot '{c}' n'est pas dans le vocabulaire.")
                 continue
                 
-            # Calculer le vecteur attendu: d ≈ c + (b - a)
+            # Calcul de l'analogie: d ≈ c + (b - a)
             a_idx = evaluator.preprocessor.word2idx[a]
             b_idx = evaluator.preprocessor.word2idx[b]
             c_idx = evaluator.preprocessor.word2idx[c]
@@ -208,17 +206,17 @@ def interactive_exploration(evaluator):
             
             target_vec = c_vec + (b_vec - a_vec)
             
-            # Trouver les 5 mots les plus similaires au vecteur cible
+            # Calcul des similarités
             similarities = np.dot(evaluator.embeddings, target_vec) / (
                 np.linalg.norm(evaluator.embeddings, axis=1) * np.linalg.norm(target_vec)
             )
             
-            # Exclure a, b et c des candidats
+            # Exclusion des mots de l'analogie
             similarities[a_idx] = -np.inf
             similarities[b_idx] = -np.inf
             similarities[c_idx] = -np.inf
             
-            # Récupérer les 5 mots les plus similaires
+            # Top 5 résultats
             top_indices = similarities.argsort()[-5:][::-1]
             
             print(f"\nRésolution de l'analogie: {a}:{b}::{c}:?")
@@ -232,16 +230,16 @@ def interactive_exploration(evaluator):
             words_input = input("Entrez une liste de mots séparés par des espaces: ")
             words = words_input.split()
             
-            # Filtrer les mots qui ne sont pas dans le vocabulaire
+            # Filtrage des mots hors vocabulaire
             words = [word for word in words if word in evaluator.preprocessor.word2idx]
             
             if not words:
                 print("Aucun des mots spécifiés n'est dans le vocabulaire.")
                 continue
                 
-            method = input("Méthode de réduction de dimension (tsne/pca): ").lower()
+            method = input("Méthode de réduction (tsne/pca): ").lower()
             if method not in ['tsne', 'pca']:
-                method = 'tsne'  # t-SNE préserve généralement mieux la structure locale des données
+                method = 'tsne'
                 
             evaluator.visualize_embeddings(words=words, method=method)
             
@@ -261,36 +259,36 @@ def main():
     
     args = parser.parse_args()
     
-    # Vérifier si le dossier results existe
+    # Vérification du dossier results
     if not os.path.exists('results'):
-        logger.error("Dossier 'results' non trouvé. Veuillez d'abord exécuter word2vec_implementation.py")
+        logger.error("Dossier 'results' non trouvé. Exécutez d'abord word2vec_implementation.py")
         return
     
-    # Déterminer les chemins des fichiers
+    # Chemins des fichiers
     model_path = f'results/{args.model_type}_model.pkl'
     preprocessor_path = f'results/{args.model_type}_preprocessor.pkl'
     
     if not os.path.exists(model_path) or not os.path.exists(preprocessor_path):
         logger.error(f"Modèle ou préprocesseur non trouvé pour {args.model_type}.")
-        logger.error("Veuillez exécuter word2vec_implementation.py pour créer les modèles.")
+        logger.error("Exécutez word2vec_implementation.py pour créer les modèles.")
         return
     
-    # Charger le modèle et le préprocesseur
+    # Chargement des fichiers
     model = load_model(model_path)
     preprocessor = load_preprocessor(preprocessor_path)
     
     if model is None or preprocessor is None:
         return
     
-    # Créer l'évaluateur
+    # Création de l'évaluateur
     evaluator = Word2VecEvaluator(model, preprocessor)
     
-    # Afficher quelques informations sur le modèle
+    # Informations sur le modèle
     logger.info(f"Modèle: {args.model_type}")
     logger.info(f"Taille du vocabulaire: {preprocessor.vocab_size}")
     logger.info(f"Dimension des embeddings: {model.embedding_dim}")
     
-    # Explorer les mots similaires
+    # Exploration des mots similaires
     for word in ['computer', 'science', 'technology', 'good', 'bad']:
         if word in preprocessor.word2idx:
             logger.info(f"Mots similaires à '{word}':")
@@ -298,37 +296,33 @@ def main():
             for similar_word, similarity in similar_words:
                 logger.info(f"  {similar_word}: {similarity:.4f}")
     
-    # Tester des analogies
+    # Test d'analogies
     explore_analogies(evaluator)
     
-    # Mode interactif si demandé
+    # Mode interactif
     if args.interactive:
         interactive_exploration(evaluator)
     else:
-        # Visualiser quelques embeddings
+        # Visualisation d'embeddings
         common_words = []
         word_counts = sorted(preprocessor.word_counts.items(), key=lambda x: x[1], reverse=True)
-        for word, _ in word_counts[:50]:  # Prendre les 50 mots les plus fréquents
-            if word in preprocessor.word2idx and len(word) > 2:  # Éviter les mots trop courts
+        for word, _ in word_counts[:50]:
+            if word in preprocessor.word2idx and len(word) > 2:
                 common_words.append(word)
-                if len(common_words) >= 30:  # Limiter à 30 mots pour la lisibilité
+                if len(common_words) >= 30:
                     break
         
         if len(common_words) < 5:
             logger.warning("Pas assez de mots pour la visualisation (minimum 5 requis)")
         else:
-            # Ajuster la perplexité en fonction du nombre de mots (doit être < nombre de mots)
-            # La gestion de ce paramètre est critique pour éviter les erreurs de t-SNE
+            # Ajustement de la perplexité
             perplexity = min(30, len(common_words) - 1)
-            logger.info(f"Visualisation de {len(common_words)} embeddings avec perplexité={perplexity}...")
+            logger.info(f"Visualisation de {len(common_words)} embeddings (perplexité={perplexity})...")
             try:
-                # Utiliser la méthode directement de l'évaluateur
                 evaluator.visualize_embeddings(words=common_words, method='tsne')
             except Exception as e:
                 logger.error(f"Erreur lors de la visualisation: {e}")
-                
-                # Alternative: utiliser PCA qui n'a pas ce problème de perplexité
-                logger.info("Tentative de visualisation avec PCA à la place...")
+                logger.info("Tentative avec PCA...")
                 evaluator.visualize_embeddings(words=common_words, method='pca')
 
 if __name__ == "__main__":
