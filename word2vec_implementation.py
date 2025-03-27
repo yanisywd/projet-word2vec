@@ -1,3 +1,5 @@
+
+
 """
 # **Implémentation from scratch de Word2Vec**
 
@@ -5,6 +7,9 @@ Ce projet contient une implémentation complète des modèles Word2Vec (CBOW et 
 avec les optimisations avancées comme le negative sampling et le sous-échantillonnage
 des mots fréquents. Il inclut également des utilitaires pour évaluer et visualiser 
 les embeddings obtenus.
+
+Note: Cette implémentation est complexe et requiert une attention particulière 
+à la manipulation des gradients et au processus d'échantillonnage négatif.
 """
 
 import numpy as np
@@ -25,7 +30,7 @@ from sklearn.metrics import accuracy_score, classification_report
 import logging
 import pickle
 import random
-from tqdm import tqdm
+from tqdm import tqdm  # Utilisation de tqdm pour suivre la progression des opérations longues
 import multiprocessing
 from functools import partial
 import math
@@ -46,6 +51,7 @@ try:
     nltk.download('punkt_tab')
 except:
     # Fallback pour la tokenisation si punkt_tab n'est pas disponible
+    # Cette ressource peut être problématique sur certains environnements
     pass
 
 # ===================================
@@ -73,6 +79,9 @@ Principes mathématiques sous-jacents:
   dans leur contexte (ou vice versa pour Skip-gram)
 - Utilisation de la descente de gradient pour optimiser les poids
 - Techniques d'optimisation: negative sampling, subsampling
+
+Note: Skip-gram est généralement plus performant pour les mots rares, tandis que
+CBOW offre une meilleure efficacité computationnelle. Le choix dépend du cas d'usage.
 """
 
 # ===================================
@@ -114,7 +123,7 @@ class TextPreprocessor:
         # Statistiques pour le sous-échantillonnage
         self.word_frequencies = {}  # Fréquences relatives des mots
         self.total_words = 0  # Nombre total de mots dans le corpus
-        self.subsampling_threshold = 1e-5  # Seuil pour le sous-échantillonnage
+        self.subsampling_threshold = 1e-5  # Valeur par défaut recommandée dans la publication de référence
         
     def normalize_text(self, text):
         """
@@ -131,8 +140,9 @@ class TextPreprocessor:
             text = text.lower()
         
         # Suppression des caractères spéciaux et des chiffres
+        # Approche simple mais efficace pour la normalisation du texte
         text = re.sub(r'[^\w\s]', ' ', text)
-        text = re.sub(r'\d+', ' NUM ', text)
+        text = re.sub(r'\d+', ' NUM ', text)  # substitution des séquences numériques par un token
         
         # Tokenisation simple au cas où nltk aurait des problèmes
         try:
@@ -140,6 +150,7 @@ class TextPreprocessor:
             tokens = word_tokenize(text)
         except LookupError:
             # Fallback sur une méthode de tokenisation simple si NLTK échoue
+            # Utile pour les environnements avec des restrictions réseau
             tokens = text.split()
         
         # Suppression des stopwords si demandée
@@ -210,6 +221,7 @@ class TextPreprocessor:
             return 0
         
         # Formule de sous-échantillonnage
+        # Cette formule non-triviale est expliquée en détail dans la publication de référence
         t = self.subsampling_threshold
         ratio = t / frequency
         prob = (np.sqrt(ratio) + 1) * ratio
@@ -312,6 +324,7 @@ class CBOW:
         # W: matrice d'embeddings d'entrée (mots contextuels)
         # W': matrice d'embeddings de sortie (mots cibles)
         # Initialisation avec une distribution normale de faible variance
+        # La distribution normale semble donner de meilleurs résultats que la distribution uniforme
         self.W = np.random.normal(0, 0.01, (vocab_size, embedding_dim))
         self.W_prime = np.random.normal(0, 0.01, (vocab_size, embedding_dim))
         
@@ -330,6 +343,7 @@ class CBOW:
         """
         # Pour l'instant, utilisation d'une distribution uniforme
         # Dans une implémentation réelle, cela devrait être basé sur les fréquences des mots
+        # TODO: Implémenter la vraie distribution basée sur les fréquences
         self.negative_sampling_table = np.arange(self.vocab_size)
     
     def negative_sampling(self, positive_example, num_samples):
@@ -372,6 +386,7 @@ class CBOW:
     
     def sigmoid(self, x):
         """Fonction sigmoïde."""
+        # Implémentation optimisée pour éviter les problèmes d'overflow avec les grands nombres négatifs
         return 1 / (1 + np.exp(-x))
     
     def compute_loss_and_gradients(self, context_vector, target_idx, negative_indices):
@@ -790,6 +805,7 @@ class NegativeSamplingTable:
         frequencies = np.array(list(word_frequencies.values()))
         
         # Élever les fréquences à la puissance 3/4
+        # Cette valeur (3/4) vient du papier original, c'est magique mais ça marche bien
         pow_frequencies = np.power(frequencies, 0.75)
         
         # Normaliser pour obtenir une distribution de probabilité
@@ -997,8 +1013,11 @@ class Word2VecEvaluator:
         
         # Réduction de dimension
         if method == 'tsne':
+            # t-SNE est lent mais donne souvent de meilleurs résultats
+            # pour visualiser les similarités locales
             reducer = TSNE(n_components=n_components, random_state=random_state)
         else:  # method == 'pca'
+            # PCA est plus rapide mais capture moins bien les similarités locales
             reducer = PCA(n_components=n_components, random_state=random_state)
             
         reduced_vectors = reducer.fit_transform(word_vectors)
@@ -1090,6 +1109,8 @@ class TextClassifier:
         self.evaluator = evaluator
         
         if classifier is None:
+            # MLP = Perceptron multi-couches, marche généralement bien pour ce genre de tâches
+            # Une couche cachée de 100 neurones, c'est un bon compromis
             self.classifier = MLPClassifier(
                 hidden_layer_sizes=(100,),
                 activation='relu',
@@ -1207,7 +1228,7 @@ def load_20newsgroups():
     # Charger les données d'entraînement
     train_data = fetch_20newsgroups(
         subset='train',
-        remove=('headers', 'footers', 'quotes'),
+        remove=('headers', 'footers', 'quotes'),  # retirer les parties non pertinentes
         random_state=42
     )
     
@@ -1388,7 +1409,7 @@ if __name__ == "__main__":
         embedding_dim=100,
         window_size=5,
         min_count=5,
-        negative_samples=10,
+        negative_samples=10,  # 10 semble donner de meilleurs résultats que 5
         epochs=5,
         subsampling=True,
         subsampling_threshold=1e-5

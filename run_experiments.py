@@ -3,6 +3,9 @@
 
 Ce script permet d'explorer et de visualiser les modèles Word2Vec
 préalablement entraînés avec word2vec_implementation.py.
+
+Note préalable: Ce script nécessite que les modèles aient été générés
+au préalable via l'exécution de word2vec_implementation.py.
 """
 
 import os
@@ -10,7 +13,7 @@ import sys
 import argparse
 import pickle
 import matplotlib.pyplot as plt
-import seaborn as sns
+import seaborn as sns  # Module de visualisation statistique basé sur matplotlib
 import pandas as pd
 import numpy as np
 import logging
@@ -77,7 +80,7 @@ def load_preprocessor(preprocessor_path):
 def explore_analogies(evaluator):
     """Test de quelques analogies classiques."""
     analogies = [
-        ('man', 'woman', 'king', 'queen'),
+        ('man', 'woman', 'king', 'queen'),  # Analogie canonique dans les modèles Word2Vec
         ('france', 'paris', 'italy', 'rome'),
         ('man', 'woman', 'uncle', 'aunt'),
         ('good', 'better', 'bad', 'worse')
@@ -238,7 +241,7 @@ def interactive_exploration(evaluator):
                 
             method = input("Méthode de réduction de dimension (tsne/pca): ").lower()
             if method not in ['tsne', 'pca']:
-                method = 'tsne'
+                method = 'tsne'  # t-SNE préserve généralement mieux la structure locale des données
                 
             evaluator.visualize_embeddings(words=words, method=method)
             
@@ -315,6 +318,7 @@ def main():
             logger.warning("Pas assez de mots pour la visualisation (minimum 5 requis)")
         else:
             # Ajuster la perplexité en fonction du nombre de mots (doit être < nombre de mots)
+            # La gestion de ce paramètre est critique pour éviter les erreurs de t-SNE
             perplexity = min(30, len(common_words) - 1)
             logger.info(f"Visualisation de {len(common_words)} embeddings avec perplexité={perplexity}...")
             try:
