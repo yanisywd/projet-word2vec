@@ -12,16 +12,13 @@ import logging
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 
-# Configuration du logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Ajout du répertoire courant au path
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.append(script_dir)
 
-# Import des modules
 try:
     from word2vec_implementation import (
         TextPreprocessor, CBOW, SkipGram, Word2VecEvaluator, TextClassifier
@@ -54,7 +51,6 @@ def load_preprocessor(preprocessor_path):
         return None
 
 def explore_analogies(evaluator):
-    """Test de quelques analogies classiques."""
     analogies = [
         ('man', 'woman', 'king', 'queen'),
         ('france', 'paris', 'italy', 'rome'),
@@ -223,7 +219,6 @@ def interactive_exploration(evaluator):
             print("Option invalide, veuillez réessayer.")
 
 def main():
-    """Fonction principale."""
     parser = argparse.ArgumentParser(description="Exploration des modèles Word2Vec")
     
     parser.add_argument("--model_type", type=str, default="cbow",
@@ -235,12 +230,10 @@ def main():
     
     args = parser.parse_args()
     
-    # Vérification du dossier results
     if not os.path.exists('results'):
         logger.error("Dossier 'results' non trouvé. Exécutez d'abord word2vec_implementation.py")
         return
     
-    # Chemins des fichiers
     model_path = f'results/{args.model_type}_model.pkl'
     preprocessor_path = f'results/{args.model_type}_preprocessor.pkl'
     
@@ -249,17 +242,14 @@ def main():
         logger.error("Exécutez word2vec_implementation.py pour créer les modèles.")
         return
     
-    # Chargement des fichiers
     model = load_model(model_path)
     preprocessor = load_preprocessor(preprocessor_path)
     
     if model is None or preprocessor is None:
         return
     
-    # Création de l'évaluateur
     evaluator = Word2VecEvaluator(model, preprocessor)
     
-    # Informations sur le modèle
     logger.info(f"Modèle: {args.model_type}")
     logger.info(f"Taille du vocabulaire: {preprocessor.vocab_size}")
     logger.info(f"Dimension des embeddings: {model.embedding_dim}")
