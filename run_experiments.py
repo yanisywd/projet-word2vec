@@ -1,12 +1,4 @@
-"""
-# **Script d'exploration et visualisation pour Word2Vec**
 
-Outil d'exploration et visualisation des modèles Word2Vec
-entraînés avec word2vec_implementation.py.
-
-Prérequis: Exécution préalable de word2vec_implementation.py pour
-générer les modèles.
-"""
 
 import os
 import sys
@@ -40,15 +32,7 @@ except ImportError as e:
     sys.exit(1)
 
 def load_model(model_path):
-    """
-    Charge un modèle Word2Vec depuis un fichier.
-    
-    Args:
-        model_path: Chemin du fichier modèle
-        
-    Returns:
-        Modèle Word2Vec
-    """
+
     logger.info(f"Chargement du modèle depuis {model_path}...")
     try:
         with open(model_path, 'rb') as f:
@@ -59,15 +43,7 @@ def load_model(model_path):
         return None
 
 def load_preprocessor(preprocessor_path):
-    """
-    Charge un préprocesseur depuis un fichier.
-    
-    Args:
-        preprocessor_path: Chemin du fichier préprocesseur
-        
-    Returns:
-        Préprocesseur TextPreprocessor
-    """
+
     logger.info(f"Chargement du préprocesseur depuis {preprocessor_path}...")
     try:
         with open(preprocessor_path, 'rb') as f:
