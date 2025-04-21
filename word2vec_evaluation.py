@@ -27,8 +27,7 @@ except ImportError as e:
     logger.error("Make sure word2vec_implementation.py is accessible")
 
 def load_models_and_preprocessors(results_dir='results'):
-    """
-    """
+
     results = {}
     
     if not os.path.exists(results_dir):
@@ -78,9 +77,7 @@ def load_models_and_preprocessors(results_dir='results'):
     return results
 
 def visualize_loss_comparison(results_dir='results'):
-    """
 
-    """
     cbow_loss_path = os.path.join(results_dir, 'cbow_loss.csv')
     skipgram_loss_path = os.path.join(results_dir, 'skipgram_loss.csv')
     
@@ -118,9 +115,7 @@ def visualize_loss_comparison(results_dir='results'):
     plt.savefig(os.path.join(results_dir, 'loss_comparison.png'))
 
 def create_loss_files_from_arrays(cbow_losses=None, skipgram_losses=None, results_dir='results'):
-    """
 
-    """
     os.makedirs(results_dir, exist_ok=True)
     
     if cbow_losses is not None:
@@ -140,9 +135,7 @@ def create_loss_files_from_arrays(cbow_losses=None, skipgram_losses=None, result
         logger.info("Skip-gram loss file created successfully")
 
 def visualize_embeddings_3d(evaluator, words=None, n=50, method='tsne', random_state=42, title=None, results_dir='results'):
-    """
 
-    """
     if words is None:
         words = []
         word_counts = sorted(evaluator.preprocessor.word_counts.items(), key=lambda x: x[1], reverse=True)
@@ -168,7 +161,6 @@ def visualize_embeddings_3d(evaluator, words=None, n=50, method='tsne', random_s
     
     reduced_vectors = reducer.fit_transform(word_vectors)
     
-    # Create 3D figure
     fig = plt.figure(figsize=(12, 10))
     ax = fig.add_subplot(111, projection='3d')
     
@@ -186,7 +178,6 @@ def visualize_embeddings_3d(evaluator, words=None, n=50, method='tsne', random_s
         s=100
     )
     
-    # Add labels
     for i, word in enumerate(words):
         ax.text(
             reduced_vectors[i, 0],
@@ -196,7 +187,6 @@ def visualize_embeddings_3d(evaluator, words=None, n=50, method='tsne', random_s
             size=8
         )
     
-    # Title and legend
     if title:
         ax.set_title(title)
     else:
@@ -210,15 +200,11 @@ def visualize_embeddings_3d(evaluator, words=None, n=50, method='tsne', random_s
 
 # Function to compare embeddings in 2D
 def compare_embeddings_2d(models_data, words=None, n=30, method='tsne', random_state=42, results_dir='results'):
-    """
 
-    """
-    # Check available models
     if 'cbow' not in models_data and 'skipgram' not in models_data:
         logger.error("No models available for comparison")
         return
     
-    # Select words to compare
     if words is None:
         # Use preprocessor from first available model
         preprocessor = models_data['cbow']['preprocessor'] if 'cbow' in models_data else models_data['skipgram']['preprocessor']
@@ -231,12 +217,10 @@ def compare_embeddings_2d(models_data, words=None, n=30, method='tsne', random_s
                 if len(words) >= n:
                     break
     
-    # Create figure
     fig, axes = plt.subplots(1, len(models_data), figsize=(7*len(models_data), 6))
     if len(models_data) == 1:
         axes = [axes]
     
-    # Process each model
     for i, (model_name, model_data) in enumerate(models_data.items()):
         evaluator = model_data['evaluator']
         preprocessor = model_data['preprocessor']
@@ -276,9 +260,7 @@ def compare_embeddings_2d(models_data, words=None, n=30, method='tsne', random_s
     plt.savefig(os.path.join(results_dir, f'model_comparison_{method}.png'))
 
 def create_similarity_heatmap(evaluator, words=None, n=20, title=None, results_dir='results'):
-    """
 
-    """
     if words is None:
         words = []
         word_counts = sorted(evaluator.preprocessor.word_counts.items(), key=lambda x: x[1], reverse=True)
@@ -323,7 +305,6 @@ def create_similarity_heatmap(evaluator, words=None, n=20, title=None, results_d
     
     plt.tight_layout()
     
-    # Save figure
     filename = 'similarity_heatmap'
     if title:
         filename = f"{filename}_{title.replace(' ', '_').lower()}"
@@ -335,7 +316,6 @@ def compare_similarity_heatmaps(models_data, words=None, n=15, results_dir='resu
         logger.error("No models available for comparison")
         return
     
-    # Select common words
     if words is None:
         # Find words present in all models
         common_words = set()
@@ -368,13 +348,11 @@ def compare_similarity_heatmaps(models_data, words=None, n=15, results_dir='resu
         logger.error("No common words between all models")
         return
     
-    # Create heatmaps
     nrows = len(models_data)
     fig, axes = plt.subplots(nrows, 1, figsize=(12, 8*nrows))
     if nrows == 1:
         axes = [axes]
     
-    # Custom colormap
     cmap = LinearSegmentedColormap.from_list('similarity', ['#ffffff', '#ffe6e6', '#ffcccc', '#ff9999', '#ff6666', '#ff0000'])
     
     for i, (model_name, model_data) in enumerate(models_data.items()):
@@ -387,7 +365,6 @@ def compare_similarity_heatmaps(models_data, words=None, n=15, results_dir='resu
             for k, word2 in enumerate(words):
                 similarity_matrix[j, k] = evaluator.word_similarity(word1, word2)
         
-        # Create heatmap
         sns.heatmap(
             similarity_matrix,
             annot=True,
@@ -407,9 +384,7 @@ def compare_similarity_heatmaps(models_data, words=None, n=15, results_dir='resu
     plt.savefig(os.path.join(results_dir, 'similarity_comparison.png'))
 
 def visualize_analogies_map(evaluator, analogies=None, method='tsne', random_state=42, results_dir='results'):
-    """
 
-    """
     if analogies is None:
         analogies = [
             ('man', 'woman', 'king', 'queen'),
@@ -451,7 +426,6 @@ def visualize_analogies_map(evaluator, analogies=None, method='tsne', random_sta
     
     plt.figure(figsize=(12, 10))
     
-    # Plot points
     for word, vector in word_to_vector.items():
         plt.scatter(vector[0], vector[1], color='blue', alpha=0.7)
         plt.annotate(word, (vector[0], vector[1]), fontsize=12)
@@ -492,9 +466,7 @@ def visualize_analogies_map(evaluator, analogies=None, method='tsne', random_sta
     plt.savefig(os.path.join(results_dir, 'analogies_map.png'))
 
 def visualize_impact_of_subsampling(evaluation_results=None, results_dir='results'):
-    """
 
-    """
     if evaluation_results is None:
         # Try to load from file
         results_path = os.path.join(results_dir, 'subsampling_evaluation.csv')
@@ -521,7 +493,6 @@ def visualize_impact_of_subsampling(evaluation_results=None, results_dir='result
     if not isinstance(evaluation_results, pd.DataFrame):
         evaluation_results = pd.DataFrame(evaluation_results)
     
-    # Visualization
     plt.figure(figsize=(12, 10))
     
     plt.subplot(2, 2, 1)
@@ -549,9 +520,7 @@ def visualize_impact_of_subsampling(evaluation_results=None, results_dir='result
     plt.savefig(os.path.join(results_dir, 'subsampling_impact.png'))
 
 def visualize_semantic_clusters(evaluator, n_clusters=5, n_words_per_cluster=10, method='tsne', random_state=42, results_dir='results'):
-    """
 
-    """
     from sklearn.cluster import KMeans
     
     words = []
@@ -566,7 +535,6 @@ def visualize_semantic_clusters(evaluator, n_clusters=5, n_words_per_cluster=10,
         logger.warning("No words to visualize.")
         return
     
-    # Get word vectors
     word_indices = [evaluator.preprocessor.word2idx[word] for word in words]
     word_vectors = evaluator.embeddings[word_indices]
     
@@ -574,7 +542,6 @@ def visualize_semantic_clusters(evaluator, n_clusters=5, n_words_per_cluster=10,
     kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
     clusters = kmeans.fit_predict(word_vectors)
     
-    # Dimensionality reduction
     if method == 'tsne':
         reducer = TSNE(n_components=2, random_state=random_state, perplexity=min(30, len(words) - 1))
     else:  # method == 'pca'
@@ -674,14 +641,10 @@ def visualize_word_frequency_distribution(preprocessor, top_n=100, results_dir='
     
     plt.tight_layout()
     
-    # Save figure
     plt.savefig(os.path.join(results_dir, 'word_frequency_distribution.png'))
 
 def run_visualizations(model_type=None, results_dir='results'):
-    """
 
-    """
-    # Create results directory if it doesn't exist
     os.makedirs(results_dir, exist_ok=True)
     
     # Load models
@@ -691,13 +654,11 @@ def run_visualizations(model_type=None, results_dir='results'):
         logger.error("No models could be loaded.")
         return
     
-    # Filter by model type
     if model_type == 'cbow' and 'cbow' in models_data:
         models_data = {'cbow': models_data['cbow']}
     elif model_type == 'skipgram' and 'skipgram' in models_data:
         models_data = {'skipgram': models_data['skipgram']}
     
-    # 1. 3D visualization of embeddings
     logger.info("Generating 3D embedding visualizations...")
     for model_name, model_data in models_data.items():
         visualize_embeddings_3d(
@@ -843,10 +804,8 @@ def evaluate_all_analogies(evaluator):
             }
             details.append(detail)
         
-        # Calculate accuracy
         accuracy = correct / len(valid_analogies) if valid_analogies else 0
         
-        # Store results
         results[group_name] = {
             'accuracy': accuracy,
             'count': len(valid_analogies),
@@ -864,9 +823,7 @@ def evaluate_all_analogies(evaluator):
     return results
 
 def create_dummy_subsampling_evaluation(results_dir='results'):
-    """
 
-    """
 
     data = {
         'model_type': ['cbow', 'cbow', 'skipgram', 'skipgram'],
@@ -884,9 +841,7 @@ def create_dummy_subsampling_evaluation(results_dir='results'):
 
 # Function to visualize all model components
 def visualize_all_components(results_dir='results'):
-    """
 
-    """
     os.makedirs(results_dir, exist_ok=True)
     
     try:
