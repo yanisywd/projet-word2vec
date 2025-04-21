@@ -18,3 +18,10 @@ Visualizes word embeddings using t-SNE and PCA
 Provides interactive exploration of word similarities
 Tests word analogies
 Supports command-line arguments for model selection
+
+**word2vec_evaluation.py:**
+- Contains functions for evaluating the performance of Word2Vec models
+- Includes metrics for accuracy, loss, and similarity
+- Provides detailed reports on model performance
+- Supports comparison between CBOW and Skip-gram models
+- Generates visualizations for evaluation results
