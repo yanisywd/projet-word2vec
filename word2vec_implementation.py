@@ -719,21 +719,15 @@ class Word2VecEvaluator:
                 
         logger.info(f"Embeddings sauvegardés dans {filepath}")
     
-# ===================================
+
 # 7. APPLICATION PRATIQUE
-# ===================================
+
 
 class TextClassifier:
     """Classification de texte utilisant des embeddings Word2Vec."""
     
     def __init__(self, evaluator, classifier=None):
-        """
-        Initialise le classificateur.
-        
-        Args:
-            evaluator: Évaluateur Word2Vec
-            classifier: Classificateur (défaut: MLPClassifier)
-        """
+ 
         self.evaluator = evaluator
         
         if classifier is None:
@@ -750,48 +744,21 @@ class TextClassifier:
             self.classifier = classifier
             
     def prepare_data(self, texts, labels):
-        """
-        Prépare les données pour la classification.
-        
-        Args:
-            texts: Liste de textes
-            labels: Liste d'étiquettes
-            
-        Returns:
-            Tuple (X, y)
-        """
+ 
         X = np.array([self.evaluator.document_to_vector(text) for text in texts])
         y = np.array(labels)
         
         return X, y
     
     def train(self, train_texts, train_labels):
-        """
-        Entraîne le classificateur.
-        
-        Args:
-            train_texts: Textes d'entraînement
-            train_labels: Étiquettes d'entraînement
-            
-        Returns:
-            self pour chaînage
-        """
+ 
         X_train, y_train = self.prepare_data(train_texts, train_labels)
         self.classifier.fit(X_train, y_train)
         
         return self
     
     def evaluate(self, test_texts, test_labels):
-        """
-        Évalue le classificateur.
-        
-        Args:
-            test_texts: Textes de test
-            test_labels: Étiquettes de test
-            
-        Returns:
-            Rapport de classification
-        """
+ 
         X_test, y_test = self.prepare_data(test_texts, test_labels)
         y_pred = self.classifier.predict(X_test)
         
@@ -804,15 +771,7 @@ class TextClassifier:
         return accuracy, report
     
     def predict(self, texts):
-        """
-        Prédit les étiquettes pour des textes.
-        
-        Args:
-            texts: Liste de textes
-            
-        Returns:
-            Prédictions
-        """
+  
         X = np.array([self.evaluator.document_to_vector(text) for text in texts])
         return self.classifier.predict(X)
     
@@ -827,9 +786,7 @@ class TextClassifier:
         with open(filepath, 'rb') as f:
             return pickle.load(f)
 
-# ===================================
-# 8. PIPELINE COMPLET
-# ===================================
+# PIPELINE COMPLET
 
 def load_20newsgroups():
     """
@@ -878,20 +835,7 @@ def load_imdb():
 def main_pipeline(dataset='20newsgroups', model_type='cbow', embedding_dim=100,
                   window_size=5, min_count=5, negative_samples=5, epochs=5,
                   subsampling=True, subsampling_threshold=1e-5):
-    """
-    Pipeline complet pour l'entraînement et l'évaluation d'un modèle Word2Vec.
-    
-    Args:
-        dataset: Nom du dataset ('20newsgroups' ou 'imdb')
-        model_type: Type de modèle ('cbow' ou 'skipgram')
-        embedding_dim: Dimension des embeddings
-        window_size: Taille de la fenêtre contextuelle
-        min_count: Seuil minimal d'occurrences pour un mot
-        negative_samples: Nombre d'échantillons négatifs
-        epochs: Nombre d'époques
-        subsampling: Application du sous-échantillonnage
-        subsampling_threshold: Seuil pour le sous-échantillonnage
-    """
+
     # 1. Chargement des données
     logger.info(f"Chargement du dataset {dataset}...")
     if dataset == '20newsgroups':
@@ -986,9 +930,8 @@ def main_pipeline(dataset='20newsgroups', model_type='cbow', embedding_dim=100,
     
     logger.info("Pipeline terminé avec succès!")
 
-# ===================================
 # EXÉCUTION DU PROGRAMME
-# ===================================
+
 
 if __name__ == "__main__":
     main_pipeline(
