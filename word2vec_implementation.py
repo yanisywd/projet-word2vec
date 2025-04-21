@@ -1,6 +1,4 @@
 """
-# **Implémentation from scratch de Word2Vec**
-
 Implémentation des modèles Word2Vec (CBOW et Skip-gram) avec negative sampling
 et sous-échantillonnage des mots fréquents. Inclut des outils d'évaluation et
 de visualisation des embeddings.
@@ -33,11 +31,9 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 
-# Configuration du logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Téléchargement des ressources NLTK
 nltk.download('punkt')
 nltk.download('stopwords')
 nltk.download('wordnet')
@@ -47,50 +43,15 @@ except:
     # Fallback si punkt_tab n'est pas disponible
     pass
 
-# ===================================
-# 1. PARTIE THÉORIQUE ET INTRODUCTION
-# ===================================
 
-"""
-Word2Vec génère des représentations vectorielles de mots basées sur l'hypothèse
-distributionnelle que les mots apparaissant dans des contextes similaires ont
-des significations similaires.
 
-Architectures:
-1. CBOW: prédit un mot à partir de son contexte
-2. Skip-gram: prédit le contexte à partir d'un mot
-
-Avantages:
-- Capture la sémantique des mots
-- Permet des opérations vectorielles (roi - homme + femme ≈ reine)
-- Plus compact que les représentations one-hot
-- Généralisation à de nouveaux contextes
-
-Base mathématique:
-- Optimisation par descente de gradient
-- Techniques d'optimisation: negative sampling, subsampling
-"""
-
-# ===================================
-# 2. PRÉPARATION DES DONNÉES
-# ===================================
 
 class TextPreprocessor:
     """Prétraitement des données textuelles."""
     
     def __init__(self, min_count=5, max_vocab_size=None, remove_stopwords=True, 
                  lemmatize=True, lowercase=True, window_size=5):
-        """
-        Initialise le préprocesseur de texte.
-        
-        Args:
-            min_count: Occurrences minimales pour inclusion dans le vocabulaire
-            max_vocab_size: Taille maximale du vocabulaire
-            remove_stopwords: Suppression des stopwords
-            lemmatize: Application de la lemmatisation
-            lowercase: Conversion en minuscules
-            window_size: Taille de la fenêtre contextuelle
-        """
+
         self.min_count = min_count
         self.max_vocab_size = max_vocab_size
         self.remove_stopwords = remove_stopwords
@@ -113,15 +74,7 @@ class TextPreprocessor:
         self.subsampling_threshold = 1e-5
         
     def normalize_text(self, text):
-        """
-        Normalise un texte par tokenisation et nettoyage.
-        
-        Args:
-            text: Texte à normaliser
-            
-        Returns:
-            Liste de tokens normalisés
-        """
+
         if self.lowercase:
             text = text.lower()
         
@@ -143,15 +96,7 @@ class TextPreprocessor:
         return tokens
     
     def build_vocab(self, texts):
-        """
-        Construit le vocabulaire à partir des textes.
-        
-        Args:
-            texts: Liste de textes
-            
-        Returns:
-            self pour chaînage
-        """
+ 
         logger.info("Construction du vocabulaire...")
         
         for text in tqdm(texts):
@@ -180,15 +125,7 @@ class TextPreprocessor:
         return self
     
     def subsample_prob(self, word):
-        """
-        Calcule la probabilité de conserver un mot selon sa fréquence.
-        
-        Args:
-            word: Mot à évaluer
-            
-        Returns:
-            Probabilité de conserver le mot (entre 0 et 1)
-        """
+
         if word not in self.word_frequencies:
             return 0
         
@@ -203,16 +140,7 @@ class TextPreprocessor:
         return min(prob, 1.0)
     
     def generate_training_pairs(self, texts, model_type='cbow'):
-        """
-        Génère des paires d'entraînement à partir des textes.
-        
-        Args:
-            texts: Liste de textes
-            model_type: 'cbow' ou 'skipgram'
-            
-        Returns:
-            Liste de paires (contexte, cible)
-        """
+
         logger.info(f"Génération des paires d'entraînement pour {model_type}...")
         
         training_pairs = []
@@ -262,23 +190,12 @@ class TextPreprocessor:
         with open(filepath, 'rb') as f:
             return pickle.load(f)
 
-# ===================================
-# 3. MODÈLE CBOW
-# ===================================
+
 
 class CBOW:
-    """Modèle Continuous Bag of Words prédisant un mot à partir de son contexte."""
     
     def __init__(self, vocab_size, embedding_dim=100, learning_rate=0.025, negative_samples=5):
-        """
-        Initialise le modèle CBOW.
-        
-        Args:
-            vocab_size: Taille du vocabulaire
-            embedding_dim: Dimension des embeddings
-            learning_rate: Taux d'apprentissage
-            negative_samples: Nombre d'échantillons négatifs par exemple
-        """
+
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
         self.learning_rate = learning_rate
@@ -292,25 +209,11 @@ class CBOW:
         self.prepare_negative_sampling_table()
         
     def prepare_negative_sampling_table(self, table_size=100000000):
-        """
-        Crée une table de distribution pour l'échantillonnage négatif.
-        
-        Args:
-            table_size: Taille de la table
-        """
+
         self.negative_sampling_table = np.arange(self.vocab_size)
     
     def negative_sampling(self, positive_example, num_samples):
-        """
-        Sélectionne des exemples négatifs pour l'entraînement.
-        
-        Args:
-            positive_example: Indice du mot positif à éviter
-            num_samples: Nombre d'échantillons à générer
-            
-        Returns:
-            Liste d'indices de mots négatifs
-        """
+
         negative_samples = []
         while len(negative_samples) < num_samples:
             neg = np.random.randint(0, self.vocab_size)
@@ -319,36 +222,17 @@ class CBOW:
         return negative_samples
     
     def forward(self, context_indices):
-        """
-        Calcule la représentation vectorielle du contexte.
-        
-        Args:
-            context_indices: Indices des mots du contexte
-            
-        Returns:
-            Vecteur de contexte moyen
-        """
+
         context_vectors = np.array([self.W[idx] for idx in context_indices])
         context_vector = np.mean(context_vectors, axis=0)
         
         return context_vector
     
     def sigmoid(self, x):
-        """Fonction sigmoïde optimisée pour éviter les overflow."""
         return 1 / (1 + np.exp(-x))
     
     def compute_loss_and_gradients(self, context_vector, target_idx, negative_indices):
-        """
-        Calcule la perte et les gradients pour un exemple.
-        
-        Args:
-            context_vector: Vecteur de contexte moyen
-            target_idx: Indice du mot cible
-            negative_indices: Indices des mots négatifs
-            
-        Returns:
-            Tuple (perte, gradients)
-        """
+
         # Vecteurs cible et négatifs
         target_vector = self.W_prime[target_idx]
         negative_vectors = self.W_prime[negative_indices]
@@ -378,13 +262,7 @@ class CBOW:
         }
     
     def update_weights(self, gradients, context_indices):
-        """
-        Met à jour les poids du modèle.
-        
-        Args:
-            gradients: Dictionnaire des gradients
-            context_indices: Indices des mots du contexte
-        """
+ 
         # Mise à jour pour le mot cible
         target_idx, target_gradient = gradients['target']
         self.W_prime[target_idx] -= self.learning_rate * target_gradient
@@ -399,16 +277,7 @@ class CBOW:
             self.W[idx] -= self.learning_rate * context_gradient
     
     def train_pair(self, context_indices, target_idx):
-        """
-        Entraîne le modèle sur une paire (contexte, cible).
-        
-        Args:
-            context_indices: Indices des mots du contexte
-            target_idx: Indice du mot cible
-            
-        Returns:
-            Perte pour cette paire
-        """
+
         context_vector = self.forward(context_indices)
         negative_indices = self.negative_sampling(target_idx, self.negative_samples)
         loss, gradients = self.compute_loss_and_gradients(context_vector, target_idx, negative_indices)
@@ -417,18 +286,7 @@ class CBOW:
         return loss
     
     def train(self, training_pairs, epochs=5, batch_size=256, verbose=True):
-        """
-        Entraîne le modèle sur un ensemble de paires.
-        
-        Args:
-            training_pairs: Liste de paires (contexte, cible)
-            epochs: Nombre d'époques
-            batch_size: Taille des lots
-            verbose: Affichage de la progression
-            
-        Returns:
-            Historique des pertes
-        """
+ 
         losses = []
         total_batches = len(training_pairs) // batch_size + (1 if len(training_pairs) % batch_size > 0 else 0)
         
@@ -478,23 +336,18 @@ class CBOW:
         with open(filepath, 'rb') as f:
             return pickle.load(f)
 
-# ===================================
-# 4. MODÈLE SKIP-GRAM
-# ===================================
+
+
+
+
+#  MODÈLE SKIP-GRAM
+
 
 class SkipGram:
     """Modèle Skip-gram prédisant le contexte à partir d'un mot cible."""
     
     def __init__(self, vocab_size, embedding_dim=100, learning_rate=0.025, negative_samples=5):
-        """
-        Initialise le modèle Skip-gram.
-        
-        Args:
-            vocab_size: Taille du vocabulaire
-            embedding_dim: Dimension des embeddings
-            learning_rate: Taux d'apprentissage
-            negative_samples: Nombre d'échantillons négatifs par exemple
-        """
+
         self.vocab_size = vocab_size
         self.embedding_dim = embedding_dim
         self.learning_rate = learning_rate
@@ -506,25 +359,11 @@ class SkipGram:
         self.prepare_negative_sampling_table()
         
     def prepare_negative_sampling_table(self, table_size=100000000):
-        """
-        Prépare une table pour l'échantillonnage négatif.
-        
-        Args:
-            table_size: Taille de la table
-        """
+
         self.negative_sampling_table = np.arange(self.vocab_size)
     
     def negative_sampling(self, positive_example, num_samples):
-        """
-        Sélectionne des exemples négatifs pour l'entraînement.
-        
-        Args:
-            positive_example: Indice du mot positif
-            num_samples: Nombre d'échantillons
-            
-        Returns:
-            Liste d'indices négatifs
-        """
+
         negative_samples = []
         while len(negative_samples) < num_samples:
             neg = np.random.randint(0, self.vocab_size)
@@ -533,20 +372,10 @@ class SkipGram:
         return negative_samples
     
     def sigmoid(self, x):
-        """Fonction sigmoïde."""
         return 1 / (1 + np.exp(-x))
     
     def train_pair(self, target_idx, context_idx):
-        """
-        Entraîne le modèle sur une paire (cible, contexte).
-        
-        Args:
-            target_idx: Indice du mot cible
-            context_idx: Indice du mot contextuel
-            
-        Returns:
-            Perte pour cette paire
-        """
+
         target_vector = self.W[target_idx]
         context_vector = self.W_prime[context_idx]
         
@@ -584,18 +413,7 @@ class SkipGram:
         return loss
     
     def train(self, training_pairs, epochs=5, batch_size=256, verbose=True):
-        """
-        Entraîne le modèle sur un ensemble de paires.
-        
-        Args:
-            training_pairs: Liste de paires (cible, contexte)
-            epochs: Nombre d'époques
-            batch_size: Taille des lots
-            verbose: Affichage de la progression
-            
-        Returns:
-            Historique des pertes
-        """
+
         losses = []
         total_batches = len(training_pairs) // batch_size + (1 if len(training_pairs) % batch_size > 0 else 0)
         
@@ -645,35 +463,19 @@ class SkipGram:
         with open(filepath, 'rb') as f:
             return pickle.load(f)
 
-# ===================================
-# 5. OPTIMISATIONS AVANCÉES
-# ===================================
+
+#  OPTIMISATIONS AVANCÉES
 
 class NegativeSamplingTable:
-    """Table d'échantillonnage négatif basée sur les fréquences des mots."""
     
     def __init__(self, word_frequencies, table_size=100000000):
-        """
-        Initialise la table d'échantillonnage.
-        
-        Args:
-            word_frequencies: Dictionnaire {mot: fréquence}
-            table_size: Taille de la table
-        """
+
         self.table_size = table_size
         self.table = self._create_table(word_frequencies)
         self.vocab_size = len(word_frequencies)
         
     def _create_table(self, word_frequencies):
-        """
-        Crée la table de distribution pour l'échantillonnage.
-        
-        Args:
-            word_frequencies: Dictionnaire {mot: fréquence}
-            
-        Returns:
-            Table d'échantillonnage
-        """
+ 
         logger.info("Création de la table d'échantillonnage négatif...")
         
         words = list(word_frequencies.keys())
@@ -704,16 +506,7 @@ class NegativeSamplingTable:
         return table
     
     def sample(self, positive_examples=None, n_samples=5):
-        """
-        Échantillonne des exemples négatifs.
-        
-        Args:
-            positive_examples: Exemples positifs à éviter
-            n_samples: Nombre d'échantillons
-            
-        Returns:
-            Liste d'indices de mots négatifs
-        """
+ 
         if positive_examples is None:
             positive_examples = []
         elif not isinstance(positive_examples, list):
@@ -728,21 +521,13 @@ class NegativeSamplingTable:
                 
         return samples
 
-# ===================================
-# 6. VISUALISATION ET ÉVALUATION
-# ===================================
+#  VISUALISATION ET ÉVALUATION
+
 
 class Word2VecEvaluator:
-    """Évaluation et visualisation des embeddings Word2Vec."""
     
     def __init__(self, model, preprocessor):
-        """
-        Initialise l'évaluateur.
-        
-        Args:
-            model: Modèle Word2Vec
-            preprocessor: Préprocesseur de texte
-        """
+
         self.model = model
         self.preprocessor = preprocessor
         self.embeddings = model.get_embeddings()
