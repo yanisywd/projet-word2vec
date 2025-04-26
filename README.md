@@ -1,4 +1,4 @@
-# **Implémentation from scratch de Word2Vec**
+# Implémentation from scratch de Word2Vec
 
 ## Word2Vec Implementation
 
@@ -25,3 +25,11 @@
 - Supports comparison between CBOW and Skip-gram models
 - Generates visualizations for evaluation results
 
+**word2vec_classifier.py:**
+- Implements neural network classification using custom Word2Vec embeddings
+- Compares classification performance with pre-trained GloVe embeddings
+- Processes and vectorizes IMDB and 20newsgroups datasets
+- Creates and trains ANN models with optimized architectures
+- Evaluates models using accuracy, precision, recall and F1-score
+- Generates comparative visualizations between embedding models
+- Provides comprehensive performance analysis and reporting
